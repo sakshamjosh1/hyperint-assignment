@@ -4,6 +4,7 @@ import asyncio
 import time
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any
 from datetime import datetime
 import psycopg2
@@ -24,6 +25,17 @@ DB_CONNECT_DELAY = float(os.getenv("DB_CONNECT_DELAY", "1.0"))   # seconds betwe
 DB_CONNECT_TIMEOUT = float(os.getenv("DB_CONNECT_TIMEOUT", "30"))  # total timeout (seconds), optional
 
 app = FastAPI(title="Hyperint SDE Assignment Backend")
+
+# --- CORS middleware (development only) ---
+# This allows your frontend running on http://localhost:5173 (or any origin) to talk to the backend.
+# For production, replace allow_origins=["*"] with a concrete list of origins.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],            # <-- change this before production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # In-memory session store: phone_number -> {"step": int, "product": str, "name": str}
 sessions: Dict[str, Dict[str, Any]] = {}
@@ -232,5 +244,10 @@ async def whatsapp_webhook(request: Request):
 
 @app.get("/api/reviews")
 async def get_reviews():
-    rows = await run_blocking(select_all_sync)
-    return JSONResponse(content={"reviews": rows})
+    try:
+        rows = await run_blocking(select_all_sync)
+        return JSONResponse(content={"reviews": rows})
+    except Exception as e:
+        # Log and return a safe error message
+        print(f"[error] failed to fetch reviews: {e!r}")
+        raise HTTPException(status_code=500, detail="Failed to fetch reviews from database.")
